@@ -102,7 +102,7 @@ CREATE TABLE site_pages (
     summary TEXT,
     content TEXT,
     metadata JSONB,
-    embedding VECTOR(1536)
+    embedding VECTOR(768)
 );
 ```
 
