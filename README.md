@@ -5,11 +5,13 @@ An intelligent documentation crawler and RAG (Retrieval-Augmented Generation) ag
 ## Features
 
 - Documentation website crawling and chunking
+- GitHub repository content processing
+- Conversation history storage and retrieval
 - Vector database storage with Supabase
-- Semantic search using OpenAI embeddings
-- RAG-based question answering
-- Support for code block preservation
-- Streamlit UI for interactive querying
+- Semantic search using sentence-transformers embeddings
+- RAG-based question answering with DeepSeek models
+- Streamlit UI with conversation management
+- Support for code block preservation in chunks
 - Available as both API endpoint and web interface
 
 ## Prerequisites
@@ -39,7 +41,7 @@ pip install -r requirements.txt
    SUPABASE_SERVICE_KEY=your_supabase_service_key
    LLM_MODEL=deepseek/deepseek-chat  # or your preferred model
    EMBEDDING_MODEL=sentence-transformers/multi-qa-mpnet-base-dot-v1 # or your preferred model
-   TOP_K=5 # number of documents that the search result will retrieve
+   TOP_K=5 # top 5 most relevant documents retrieved by the search result
    ```
 
 ## Usage
@@ -59,6 +61,14 @@ To crawl and store documentation in the vector database:
 
 ```bash
 python crawl_conflowgen_docs.py
+```
+
+### Crawl GitHub Repository
+
+To crawl and store repository content (markdown files, notebooks, etc.):
+
+```bash
+python crawl_conflowgen_github.py
 ```
 
 This will:
@@ -94,6 +104,16 @@ CREATE TABLE site_pages (
 );
 ```
 
+### Conversation System
+
+The system maintains conversation history with:
+- Persistent storage in Supabase
+- Automatic title generation from first message
+- Timestamp tracking
+- Message serialization/deserialization
+
+Execute `conversations.sql` to set up the conversation table before using the Streamlit UI.
+
 ### Chunking Configuration
 
 You can configure chunking parameters in `crawl_conflowgen_docs.py`:
@@ -108,17 +128,23 @@ The chunker intelligently preserves:
 
 ## Project Structure
 
-- `crawl_conflowgen_docs.py`: Documentation crawler and processor
-- `pydantic_ai_expert.py`: RAG agent implementation
-- `streamlit_ui.py`: Web interface
-- `site_pages.sql`: Database setup commands
-- `requirements.txt`: Project dependencies
+- `crawl_conflowgen_docs.py`: Documentation website crawler
+- `crawl_conflowgen_github.py`: GitHub repo content processor  
+- `pydantic_ai_rag.py`: RAG agent with tool integrations
+- `streamlit_ui.py`: Interactive web interface with chat history
+- `site_pages.sql`: Vector storage table setup
+- `conversations.sql`: Chat history table setup  
+- `.env.sample`: Environment configuration template
+- `requirements.txt`: Python dependencies
 
 ## Error Handling
 
 The system includes robust error handling for:
 - Network failures during crawling
-- API rate limits
+- Content conversion errors
+- API rate limits and timeouts  
 - Database connection issues
-- Embedding generation errors
+- Embedding generation failures
 - Invalid URLs or content
+- Conversation serialization errors
+- Vector search failures
