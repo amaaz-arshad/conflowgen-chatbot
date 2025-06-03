@@ -15,7 +15,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
     TextPart,
 )
-from pydantic_ai_expert import get_agent, PydanticAIDeps
+from pydantic_ai_rag import pydantic_ai_rag, PydanticAIDeps
 from supabase import Client as SupabaseClient
 
 
@@ -29,17 +29,11 @@ supabase: SupabaseClient = SupabaseClient(
 
 # ── OPENAI CLIENT SETUP ─────────────────────────────────────────────────────────
 openai_client = AsyncOpenAI(
-    api_key=os.getenv("OPENAI_API_KEY"),
+    api_key=os.getenv("OPENROUTER_API_KEY"),
     base_url=os.getenv("BASE_URL")
 )
 logfire.configure(send_to_logfire="never")
 
-# ── MODEL SELECTION ────────────────────────────────────────────────────────────
-available_models = ["deepseek/deepseek-chat", "deepseek/deepseek-r1"]
-
-# Initialize default model if not set
-if "selected_model" not in st.session_state:
-    st.session_state.selected_model = os.getenv("LLM_MODEL", available_models[0])
 
 # ── HELPERS ────────────────────────────────────────────────────────────────────
 class ChatMessage(TypedDict):
@@ -107,12 +101,12 @@ def _save_conversation_to_supabase(conv: dict) -> bool:
 
 def _load_all_conversations_from_supabase() -> dict[str, dict]:
     """
-    Query Supabase's `conversations` table (ordered by updated_at DESC) and reconstruct
+    Query Supabase’s `conversations` table (ordered by updated_at DESC) and reconstruct
     each row into:
       {
         "id": <UUID str>,
         "title": <string>,
-        "messages": [ ModelRequest(...), ModelResponse(...), ... ],
+        "messages": [ ModelRequest(...), ModelResponse(...), … ],
         "created": <epoch float>,
         "updated": <epoch float>
       }
@@ -224,11 +218,8 @@ async def run_agent_with_streaming(user_input: str, messages: list) -> None:
     Invoke the Pydantic-AI agent in streaming mode. After the stream completes,
     append a final ModelResponse to `messages`.
     """
-    # Get agent with current model selection
-    agent = get_agent(st.session_state.selected_model)
-    
     deps = PydanticAIDeps(supabase=supabase, openai_client=openai_client)
-    async with agent.run_stream(
+    async with pydantic_ai_rag.run_stream(
         user_input, deps=deps, message_history=messages[:-1]
     ) as res:
         full_text = ""
@@ -237,7 +228,7 @@ async def run_agent_with_streaming(user_input: str, messages: list) -> None:
             full_text += chunk
             placeholder.markdown(full_text)
 
-        # Filter out any user-prompt echoes; keep only the assistant's final ModelResponse
+        # Filter out any user-prompt echoes; keep only the assistant’s final ModelResponse
         new_msgs = [
             m for m in res.new_messages()
             if not (
@@ -253,22 +244,11 @@ async def run_agent_with_streaming(user_input: str, messages: list) -> None:
 async def main():
     st.title("ConFlowGen Chatbot")
 
-    # ── MODEL SELECTOR IN SIDEBAR ──────────────────────────────────────────────
-    with st.sidebar:
-        # st.header("Settings")
-        st.selectbox(
-            "Model",
-            options=available_models,
-            key="selected_model",
-            help="Switch between different LLM models"
-        )
-        # st.divider()
-
-    # ── LOAD conversations FROM SUPABASE (if any) ───────────────────────────────
+    # ── LOAD conversations FROM SUPABASE (if any) ─────────────────────────────────
     if "conversations" not in st.session_state:
         st.session_state.conversations = _load_all_conversations_from_supabase()
 
-    # ── DETERMINE current_conversation_id ───────────────────────────────────────
+    # ── DETERMINE current_conversation_id ─────────────────────────────────────────
     if "current_conversation_id" not in st.session_state:
         # Always start with no chat selected → blank main pane
         st.session_state.current_conversation_id = None
@@ -278,7 +258,7 @@ async def main():
     if current_id:
         current = st.session_state.conversations.get(current_id)
 
-    # ── GLOBAL CSS TWEAK  ──────────────────────────────────────────────────────
+    # ── GLOBAL CSS TWEAK  ────────────────────────────────────────────────────────
     st.markdown(
         """
         <style>
@@ -291,12 +271,12 @@ async def main():
         """,
         unsafe_allow_html=True,
     )
-    
-    # ── SIDEBAR: Chat History ─────────────────────────────────────────────────
+
+    # ── SIDEBAR: Chat History ────────────────────────────────────────────────────
     with st.sidebar:
         st.header("Chat history")
 
-        # Always show "New chat" button.
+        # Always show “New chat” button.
         # Only actually create a new conversation if the CURRENT chat has ≥ 1 message.
         if st.button("New chat", icon=":material/add:", use_container_width=True, key="new_chat"):
             if current and len(current["messages"]) > 0:
@@ -345,7 +325,7 @@ async def main():
                         st.session_state.current_conversation_id = None
                     st.rerun()
 
-    # ── MAIN PANE: Display messages & input ─────────────────────────────────────
+    # ── MAIN PANE: Display messages & input ──────────────────────────────────────
     st.write("Ask any question about ConFlowGen")
 
     # 1) If there is an active conversation, show its messages:
@@ -365,11 +345,11 @@ async def main():
             with st.chat_message("user"):
                 st.markdown(user_input)
 
-            # Immediately stream the assistant's response:
+            # Immediately stream the assistant’s response:
             with st.chat_message("assistant"):
                 await run_agent_with_streaming(user_input, current["messages"])
 
-            # Persist the assistant's response too
+            # Persist the assistant’s response too
             current["updated"] = time.time()
             _save_conversation_to_supabase(current)
 
@@ -379,7 +359,7 @@ async def main():
             new_req = ModelRequest(parts=[UserPromptPart(content=user_input)])
             current["messages"].append(new_req)
 
-            # Save the updated conversation (user's message)
+            # Save the updated conversation (user’s message)
             current["updated"] = time.time()
             _save_conversation_to_supabase(current)
 

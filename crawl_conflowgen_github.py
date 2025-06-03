@@ -15,7 +15,7 @@ load_dotenv()
 
 # Initialize OpenAI and Supabase clients
 openai_client = AsyncOpenAI(
-    api_key=os.getenv("OPENAI_API_KEY"),
+    api_key=os.getenv("OPENROUTER_API_KEY"),
     base_url=os.getenv("BASE_URL"),
 )
 supabase: Client = create_client(

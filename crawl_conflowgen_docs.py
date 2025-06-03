@@ -19,7 +19,7 @@ load_dotenv()
 
 # Initialize OpenAI and Supabase clients
 openai_client = AsyncOpenAI(
-    api_key=os.getenv("OPENAI_API_KEY"),
+    api_key=os.getenv("OPENROUTER_API_KEY"),
     base_url=os.getenv("BASE_URL"),
 )
 supabase: Client = create_client(
@@ -110,11 +110,6 @@ async def get_embedding(text: str) -> List[float]:
     try:
         embeddings = embeddingModel.encode(text).tolist()
         return embeddings
-        # response = await openai_client.embeddings.create(
-        #     model="text-embedding-3-small",
-        #     input=text
-        # )
-        # return response.data[0].embedding
     except Exception as e:
         print(f"Error getting embedding: {e}")
         return [0] * 768  # Return zero vector on error

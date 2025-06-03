@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 import logfire
 import asyncio
+import httpx
 import os
 
-from pydantic_ai import Agent, ModelRetry, RunContext, Tool
+from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.models.openai import OpenAIModel
 from openai import AsyncOpenAI
 from supabase import Client
@@ -15,8 +16,14 @@ from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 
-# Initialize embedding model
+llm = os.getenv('LLM_MODEL')
+model = OpenAIModel(
+    model_name=os.getenv("LLM_MODEL"),
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+    base_url=os.getenv("BASE_URL")
+)
 embeddingModel = SentenceTransformer(os.getenv("EMBEDDING_MODEL"))
+
 
 logfire.configure(send_to_logfire='if-token-present')
 
@@ -34,13 +41,29 @@ When you need to answer, first look up relevant documentation (using RAG against
 If you cannot find an answer in the documentation or on the right URL, be honest and tell the user.
 """
 
-# Define tools without decorators
+pydantic_ai_rag = Agent(
+    model,
+    system_prompt=system_prompt,
+    deps_type=PydanticAIDeps,
+    retries=2
+)
+
+async def get_embedding(text: str) -> List[float]:
+    """Get embedding vector from OpenAI."""
+    try:
+        embeddings = embeddingModel.encode(text).tolist()
+        return embeddings
+    except Exception as e:
+        print(f"Error getting embedding: {e}")
+        return [0] * 768  # Return zero vector on error
+
+@pydantic_ai_rag.tool
 async def retrieve_relevant_documentation(ctx: RunContext[PydanticAIDeps], user_query: str) -> str:
     """
     Retrieve relevant documentation chunks based on the query with RAG.
     
     Args:
-        ctx: The context including the Supabase client
+        ctx: The context including the Supabase client and OpenAI client
         user_query: The user's question or query
         
     Returns:
@@ -55,7 +78,7 @@ async def retrieve_relevant_documentation(ctx: RunContext[PydanticAIDeps], user_
             'match_site_pages',
             {
                 'query_embedding': query_embedding,
-                'match_count': int(os.getenv("TOP_K", 5)),  # Default to top 5 matches
+                'match_count': os.getenv("TOP_K", 5),  # Default to top 5 matches
                 'filter': {'source': 'conflowgen_docs'}
             }
         ).execute()
@@ -67,7 +90,7 @@ async def retrieve_relevant_documentation(ctx: RunContext[PydanticAIDeps], user_
         formatted_chunks = []
         for doc in result.data:
             chunk_text = f"""
-# {doc['title']}
+# Chunk:
 
 {doc['content']}
 """
@@ -80,6 +103,7 @@ async def retrieve_relevant_documentation(ctx: RunContext[PydanticAIDeps], user_
         print(f"Error retrieving documentation: {e}")
         return f"Error retrieving documentation: {str(e)}"
 
+@pydantic_ai_rag.tool
 async def list_documentation_pages(ctx: RunContext[PydanticAIDeps]) -> List[str]:
     """
     Retrieve a list of all available Pydantic AI documentation pages.
@@ -105,6 +129,7 @@ async def list_documentation_pages(ctx: RunContext[PydanticAIDeps]) -> List[str]
         print(f"Error retrieving documentation pages: {e}")
         return []
 
+@pydantic_ai_rag.tool
 async def get_page_content(ctx: RunContext[PydanticAIDeps], url: str) -> str:
     """
     Retrieve the full content of a specific documentation page by combining all its chunks.
@@ -129,8 +154,8 @@ async def get_page_content(ctx: RunContext[PydanticAIDeps], url: str) -> str:
             return f"No content found for URL: {url}"
             
         # Format the page with its title and all chunks
-        page_title = result.data[0]['title'].split(' - ')[0]  # Get the main title
-        formatted_content = [f"# {page_title}\n"]
+        # page_title = result.data[0]['title'].split(' - ')[0]  # Get the main title
+        formatted_content = [f"# Chunk:\n"]
         
         # Add each chunk's content
         for chunk in result.data:
@@ -142,48 +167,3 @@ async def get_page_content(ctx: RunContext[PydanticAIDeps], url: str) -> str:
     except Exception as e:
         print(f"Error retrieving page content: {e}")
         return f"Error retrieving page content: {str(e)}"
-
-async def get_embedding(text: str) -> List[float]:
-    """Get embedding vector using local model"""
-    try:
-        return embeddingModel.encode(text).tolist()
-    except Exception as e:
-        print(f"Error getting embedding: {e}")
-        return [0] * 768  # Return zero vector on error
-
-def get_agent(model_name: str) -> Agent:
-    """Create agent with specified model and tools"""
-    model = OpenAIModel(
-        model_name=model_name,
-        api_key=os.getenv("OPENAI_API_KEY"),
-        base_url=os.getenv("BASE_URL")
-    )
-    
-    # Create tools with proper metadata
-    tools = [
-        Tool(
-            name="retrieve_relevant_documentation",
-            description="Retrieve relevant documentation based on user query",
-            function=retrieve_relevant_documentation
-        ),
-        Tool(
-            name="list_documentation_pages",
-            description="List available documentation pages",
-            function=list_documentation_pages
-        ),
-        Tool(
-            name="get_page_content",
-            description="Get full content of a documentation page",
-            function=get_page_content
-        )
-    ]
-    
-    agent = Agent(
-        model,
-        system_prompt=system_prompt,
-        deps_type=PydanticAIDeps,
-        tools=tools,
-        retries=2
-    )
-    
-    return agent

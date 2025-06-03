@@ -34,10 +34,12 @@ pip install -r requirements.txt
    - Rename `.env.example` to `.env`
    - Edit `.env` with your API keys and preferences:
    ```env
-   OPENAI_API_KEY=your_openai_api_key
+   OPENROUTER_API_KEY=your_openrouter_api_key
    SUPABASE_URL=your_supabase_url
    SUPABASE_SERVICE_KEY=your_supabase_service_key
-   LLM_MODEL=gpt-4o-mini  # or your preferred OpenAI model
+   LLM_MODEL=deepseek/deepseek-chat  # or your preferred model
+   EMBEDDING_MODEL=sentence-transformers/multi-qa-mpnet-base-dot-v1 # or your preferred model
+   TOP_K=5 # number of documents that the search result will retrieve
    ```
 
 ## Usage
