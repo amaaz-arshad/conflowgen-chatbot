@@ -76,6 +76,8 @@ This will:
 2. Crawl each page and split into chunks
 3. Generate embeddings and store in Supabase
 
+Note: Before running the above command, make sure to place the conflowgen github repo at the root level of this project.
+
 ### Streamlit Web Interface
 
 For an interactive web interface to query the documentation:
